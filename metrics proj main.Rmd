@@ -1,0 +1,1259 @@
+---
+title: "new"
+author: "Semilore Adegbonmire"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+Clean data
+```{r, message=FALSE, echo=TRUE, results='hide'}
+library(haven)
+library(dplyr)
+
+# Replace "path/to/your/file.sav" with the actual file path
+data5 <- read_sav("cst14_data_EN_PU_v2_20151210.sav")
+
+
+data6 <- read_sav("cst16_studentdata_en_pu_20171211.sav")
+data7 <- read_sav("cst18_studentdata_en_pu_20190906.sav")
+
+
+data8 <- read.csv("f6761337-47e9-455a-a3c4-ea8516aa634f.csv")
+
+data5 <- data5 %>%
+  mutate(year = "2014/2015")
+
+data6 <- data6 %>%
+  mutate(year = "2016/2017")
+
+data7 <- data7 %>%
+  mutate(year = "2018/2019")
+
+data8 <- data8 %>%
+  mutate(year = "2021/2022")
+
+```
+
+
+```{r setup, include=FALSE, echo=TRUE, results='hide'}
+
+data8 <- data8 %>%
+  select(SS_010, DVLAST30, ALC_010, ALC_040, 
+         CAN_010, CAN_040, CA_020, 
+        PH_010, PH_020, PH_030, PH_040, 
+         BUL_010, BUL_020, BUL_030, BUL_040, BUL_050,
+         GRADE, DVGENDER, DVURBAN, PROVID, 
+         BUL_060, PH_070, PH_080, ALC_080, CAN_050, DVTY1ST,WTPUMF,year,PH_051,PH_061)
+
+
+
+```
+
+
+```{r,message=FALSE,echo=TRUE, results='hide'}
+
+data5 <- data5 %>%
+  select(SS_010, DVLAST30, ALC_010, ALC_040, 
+         CAN_010, CAN_040, CA_020, 
+        PH_010, PH_020, PH_030, PH_040, 
+         BUL_010, BUL_020, BUL_030, BUL_040, BUL_050,
+         GRADE, SEX, DVURBAN, provID, 
+         BUL_060, PH_070, PH_080, ALC_080, CAN_050, DVTY1ST,WTPP,year,PH_050,PH_060)
+data6 <- data6 %>%
+  select(SS_010, DVLAST30, ALC_010, ALC_040, 
+         CAN_010, CAN_040, CA_020, 
+        PH_010, PH_020, PH_030, PH_040, 
+         BUL_010, BUL_020, BUL_030, BUL_040, BUL_050,
+         GRADE, SEX, DVURBAN, PROVID, 
+         BUL_060, PH_070, PH_080, ALC_080, CAN_050, DVTY1ST,WTPP,year,PH_050,PH_060)
+data7 <- data7 %>%
+  select(SS_010, DVLAST30, ALC_010, ALC_040, 
+         CAN_010, CAN_040, CA_020, 
+        PH_010, PH_020, PH_030, PH_040, 
+         BUL_010, BUL_020, BUL_030, BUL_040, BUL_050,
+         GRADE, SEX, DVURBAN, PROVID, 
+         BUL_060, PH_070, PH_080, ALC_080, CAN_050, DVTY1ST,WTPP,year,PH_051,PH_061)
+# Standardize column names to match across datasets
+colnames(data6) <- colnames(data5)
+colnames(data7) <- colnames(data5)
+colnames(data8) <- colnames(data5)
+
+
+
+
+```
+
+
+
+```{r, echo=TRUE, results='hide'}
+# Standardize column names to match across datasets
+colnames(data6) <- colnames(data5)
+colnames(data7) <- colnames(data5)
+colnames(data8) <- colnames(data5)
+
+# Drop observations where SEX (DVGENDER) equals 99
+data8 <- data8 %>%
+  filter(SEX != 99)
+
+```
+
+
+```{r, warning=FALSE, echo=TRUE, results='hide'}
+# Combine the datasets
+mydata2 <- bind_rows(data5, data6, data7,data8)
+
+```
+
+```{r, echo=TRUE, results='hide'}
+# Filter out rows where provID = 13 OR GRADE = 6
+mydata2 <- mydata2[!(mydata2$provID == 13 | mydata2$GRADE == 6), ]
+
+```
+
+
+
+```{r, echo=TRUE, results='hide'}
+# Define provinces with early regulations starting 2016/2017
+regulated_provinces_7 <- c("59", "35", "24", 
+                            "12", 
+                           "11", "10")
+
+# Create binary variable `ecig_reg`
+mydata2 <- mydata2 %>%
+  mutate(
+    ecig_reg = case_when(
+      # Exposed: 2016/2017 respondents from the 7 provinces
+      year == "2016/2017" & provID %in% regulated_provinces_7 ~ 1,
+      
+      # Exposed: 2018/2019 respondents from all provinces
+      year == "2018/2019" ~ 1,
+      
+      year == "2021/2022" ~ 1,
+      
+      # Not Exposed: 2016/2017 respondents from non-regulated provinces
+      year == "2016/2017" & provID %in% c("46", "47", "48") ~ 0,
+      
+      # Not Exposed: All provinces in 2014/2015
+      year == "2014/2015" ~ 0,
+      
+      # Default to NA for unclear cases
+      TRUE ~ NA_real_
+    )
+  )
+
+
+# Define provinces with bans for 2021/22
+ban_provinces_2021_22 <- c("59","12", "35", "11", "47")  # BC, Nova Scotia, Ontario, PEI, Saskatchewan
+
+# Create the flavored_ban variable
+mydata2 <- mydata2 %>%
+  mutate(
+    flavored_ban = case_when(
+      # Assign 1 for specified provinces in 2021/22
+      year == "2021/2022" & provID %in% ban_provinces_2021_22 ~ 1,
+      
+      # Assign 0 for other years (2014/15, 2016/17, 2018/19)
+      year %in% c("2014/2015", "2016/2017", "2018/2019") ~ 0,
+      
+      # Default to NA for any unclear cases
+      TRUE ~ NA_real_
+    )
+  )
+
+
+mydata2 <- mydata2 %>%
+  mutate(mentholcigaretteban = case_when(
+    # CTADS 2014/2015: All provinces are pre-ban (0)
+    year == "2014/2015" ~ 0,
+    
+    # CTADS 2016/2017: Nova Scotia, Alberta, New Brunswick, Quebec, Ontario, PEI turn 1
+    year == "2016/2017" & provID %in% c("12", "48", 
+                                          "24", "35", "11") ~ 1,
+    year == "2016/2017" & !provID %in% c("12", "48", 
+                                          "24", "35", "11") ~ 0,
+
+    # CTADS 2018/2019: All remaining provinces turn 1
+    year == "2018/2019" ~ 1,
+    
+    year == "2021/2022" ~ 1,
+
+    # Default case
+    TRUE ~ 0
+  ))
+
+
+
+```
+
+
+```{r, echo=TRUE, results='hide'}
+# Recode SEX into a binary variable
+mydata2 <- mydata2 %>%
+  mutate(
+    SEX_binary = case_when(
+      SEX == 1 ~ 1,       # Female becomes 1
+      SEX == 2 ~ 0,       # Male becomes 0
+      TRUE ~ NA_real_     # Handle missing or invalid cases
+    )
+  )
+
+# Recode DVURBAN into a binary variable
+mydata2 <- mydata2 %>%
+  mutate(DVURBAN_binary = case_when(
+    DVURBAN == 1 ~ 1,  # Urban becomes 1
+    DVURBAN == 2 ~ 0,  # Rural becomes 0
+    TRUE ~ NA_real_    # Handle missing or invalid cases
+  ))
+
+mydata2 <- mydata2 %>%
+  mutate(DVLAST30_recode = case_when(
+    DVLAST30 == 1 ~ 1,  # 1 remains 1
+    DVLAST30 == 2 ~ 0,  # 2 becomes 0
+    TRUE ~ NA_real_      # Handle any unexpected values as NA
+  ))
+
+
+mydata2 <- mydata2 %>%
+  mutate(ALC_010_recode = case_when(
+    ALC_010 == 1 ~ 1,         # Yes remains 1
+    ALC_010 == 2 ~ 0,         # No becomes 0
+    ALC_010 %in% c(99, 9996) ~ NA_real_, # Not Stated and Not Asked become NA
+    TRUE ~ NA_real_           # Handle any unexpected values as NA
+  ))
+
+
+mydata2 <- mydata2 %>%
+  mutate(CA_020_recode = case_when(
+    CA_020 %in% c(1, 2) ~ 1,       # "Very difficult" and "Fairly difficult" become 1
+    CA_020 %in% c(3, 4) ~ 2,       # "Fairly easy" and "Very easy" become 2
+    CA_020 %in% c(5, 99) ~ NA_real_, # "I do not know" and "Not Stated" become NA
+    TRUE ~ NA_real_                # Handle unexpected values as NA
+  ))
+
+
+
+
+# Recode PH_010 to PH_040 into binary variables
+mydata2 <- mydata2 %>%
+  mutate(
+    harm_indicator_PH_010 = case_when(
+      PH_010 == 1 ~ 0,       # "No risk" becomes 0
+      PH_010 %in% c(2, 3, 4) ~ 1, # "Slight risk", "Moderate risk", "Great risk" become 1
+      PH_010 %in% c(5, 99) ~ NA_real_, # "I do not know" and "Not Stated" become NA
+      TRUE ~ NA_real_        # Handle any other unexpected cases
+    ),
+    harm_indicator_PH_020 = case_when(
+      PH_020 == 1 ~ 0,
+      PH_020 %in% c(2, 3, 4) ~ 1,
+      PH_020 %in% c(5, 99) ~ NA_real_,
+      TRUE ~ NA_real_
+    ),
+    harm_indicator_PH_030 = case_when(
+      PH_030 == 1 ~ 0,
+      PH_030 %in% c(2, 3, 4) ~ 1,
+      PH_030 %in% c(5, 99) ~ NA_real_,
+      TRUE ~ NA_real_
+    ),
+    harm_indicator_PH_040 = case_when(
+      PH_040 == 1 ~ 0,
+      PH_040 %in% c(2, 3, 4) ~ 1,
+      PH_040 %in% c(5, 99) ~ NA_real_,
+      TRUE ~ NA_real_
+    )
+  )
+
+
+mydata2 <- mydata2 %>%
+  mutate(
+    BUL_010_binary = case_when(
+      BUL_010 == 1 ~ 1,       # "Yes" becomes 1
+      BUL_010 == 2 ~ 0,       # "No" becomes 0
+      BUL_010 == 99 ~ NA_real_, # "Not Stated" becomes NA
+      TRUE ~ NA_real_         # Handle unexpected values as NA
+    ),
+    BUL_020_binary = case_when(
+      BUL_020 == 1 ~ 1,
+      BUL_020 == 2 ~ 0,
+      BUL_020 == 99 ~ NA_real_,
+      TRUE ~ NA_real_
+    ),
+    BUL_030_binary = case_when(
+      BUL_030 == 1 ~ 1,
+      BUL_030 == 2 ~ 0,
+      BUL_030 == 99 ~ NA_real_,
+      TRUE ~ NA_real_
+    ),
+    BUL_040_binary = case_when(
+      BUL_040 == 1 ~ 1,
+      BUL_040 == 2 ~ 0,
+      BUL_040 == 99 ~ NA_real_,
+      TRUE ~ NA_real_
+    ),
+    BUL_050_binary = case_when(
+      BUL_050 == 1 ~ 1,
+      BUL_050 == 2 ~ 0,
+      BUL_050 == 99 ~ NA_real_,
+      TRUE ~ NA_real_
+  
+    )
+  )
+
+mydata2 <- mydata2 %>%
+  mutate(BUL_060_binary = case_when(
+    BUL_060 == 1 ~ 1,         # "I have not been bullied" becomes 0
+    BUL_060 %in% c(2, 3, 4, 5) ~ 0, # "Less than once a week" to "Daily or almost daily" becomes 1
+    BUL_060 == 99 ~ NA_real_, # "Not Stated" becomes NA
+    TRUE ~ NA_real_           # Handle unexpected values as NA
+  ))
+
+mydata2 <- mydata2 %>%
+  mutate(
+    DVTY1ST = ifelse(DVTY1ST == 99, NA_real_, DVTY1ST)
+  )
+
+# Recode PH_050 and PH_060
+mydata2 <- mydata2 %>%
+  mutate(
+    harm_indicator_PH_050 = case_when(
+      PH_050 == 1 ~ 0,                 # Recode 1 to 0
+      PH_050 %in% c(2, 3, 4) ~ 1,      # Recode 2, 3, 4 to 1
+      PH_050 %in% c(5, 99) ~ NA_real_, # Recode 5 and 99 to NA
+      TRUE ~ NA_real_                  # All other values set to NA
+    ),
+    harm_indicator_PH_060 = case_when(
+      PH_060 == 1 ~ 0,                 # Recode 1 to 0
+      PH_060 %in% c(2, 3, 4) ~ 1,      # Recode 2, 3, 4 to 1
+      PH_060 %in% c(5, 99) ~ NA_real_, # Recode 5 and 99 to NA
+      TRUE ~ NA_real_                  # All other values set to NA
+    )
+  )
+
+
+```
+
+Main Regressions for both outcomes
+
+```{r, message=FALSE,echo=TRUE, results='hide'}
+# Set the number of digits to display in output
+options(scipen = 999, digits = 3)
+library(dplyr)
+library(lmtest)
+library(sandwich)
+
+#Perception of harm of occasional e-cigarette use
+# Run the DD model with year-month and province dummies without controls
+dd_model <- lm(harm_indicator_PH_050 ~ flavored_ban +
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = mydata2, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+
+
+```
+```{r, echo=TRUE, results='hide'}
+
+
+
+
+#Perception of harm of occasional e-cigarette use
+# Run the DD model with year-month and province dummies with controls
+dd_model <- lm(harm_indicator_PH_050 ~ flavored_ban +
+                 ecig_reg + 
+                 SEX_binary +
+                 mentholcigaretteban +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                 as.factor(DVTY1ST)+
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = mydata2, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+```{r,echo=TRUE, results='hide' }
+
+
+#Perception of harm of occasional cigarette use
+# Run the DD model with year-month and province dummies without controls
+dd_model <- lm(harm_indicator_PH_010 ~ flavored_ban +
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = mydata2, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+
+```
+
+
+```{r, echo=TRUE, results='hide'}
+
+
+#Perception of harm of occasional cigarette use
+# Run the DD model with year-month and province dummies with controls
+dd_model <- lm(harm_indicator_PH_010 ~ flavored_ban +
+                 ecig_reg + 
+                 SEX_binary +
+                 mentholcigaretteban +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                 as.factor(DVTY1ST)+
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = mydata2, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+
+
+
+
+
+Pre trends test
+
+```{r,message=FALSE,echo=TRUE, results='hide'}
+library(car)
+#Parralel trends
+
+
+
+mydata2$treated <- ifelse(mydata2$provID %in% c(59, 12, 35, 11, 47), 1, 0)
+mydata2_par <- mydata2 %>%
+  filter(year!= "2021/2022")
+# Run the DD model with year-month and province dummies
+
+# Convert 'year' to an unordered factor
+mydata2_par$year <- factor(mydata2_par$year, ordered = FALSE)
+
+# Set 2018/2019 as the reference year
+mydata2_par$year <- relevel(mydata2_par$year, ref = "2018/2019")
+
+
+# Pre-trends test for Perception of harm of occasional e-cigarette use
+dd_model <- lm(harm_indicator_PH_050 ~ as.factor(year) * treated  + 
+                  ecig_reg + 
+                 SEX_binary +
+                 mentholcigaretteban +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                 as.factor(DVTY1ST)+
+                 as.factor(provID),          # Province dummies
+               data = mydata2_par, weights = WTPP)
+
+
+
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+# Print the results
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+```
+
+
+```{r, echo=TRUE, results='hide'}
+
+# Pre-trends test for Perception of harm of occasional cigarette use
+dd_model <- lm(harm_indicator_PH_010 ~ as.factor(year) * treated  + 
+                  ecig_reg +
+                 SEX_binary +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                  as.factor(DVTY1ST)+
+                 as.factor(provID),          # Province dummies
+               data = mydata2_par, weights = WTPP)
+
+
+
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+# Print the results
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+```
+
+
+
+
+
+
+```{r,message=FALSE,echo=TRUE, results='hide'}
+#Generate dummies for categorical variables to calculate weighted mean and SD
+
+
+library(fastDummies)
+# Create dummy variables for the 'GRADE' column
+mydata2 <- dummy_cols(mydata2, select_columns = "GRADE", 
+                                remove_first_dummy = FALSE, 
+                                 remove_selected_columns = FALSE)
+
+# Create dummy variables while excluding NA values as a category
+mydata2 <- dummy_cols(mydata2, select_columns = "DVTY1ST", 
+                      remove_first_dummy = FALSE, 
+                      remove_selected_columns = FALSE, 
+                      )
+
+                             
+# Identify the created dummy variable columns
+dummy_columns <- grep("DVTY1ST_", colnames(mydata2), value = TRUE)
+
+# Set dummy variable rows to NA where the original DVTY1ST is NA
+mydata2[dummy_columns] <- lapply(mydata2[dummy_columns], function(col) {
+  ifelse(is.na(mydata2$DVTY1ST), NA, col)
+})
+
+
+
+```
+
+Graphs of Trends
+```{r,message=FALSE,echo=TRUE, results='hide'}
+#Create graph showing trends in Perception of harm of e-cig use in treated and control provinces
+library(ggplot2)
+library(dplyr)
+
+
+
+# Prepare the data: calculate weighted mean perception of harm (harm_indicator_PH_050)
+trend_data <- mydata2 %>%
+  group_by(year, treated) %>%  # Ensure data is grouped by year and treated
+  summarize(
+    mean_harm = sum(harm_indicator_PH_050 * WTPP, na.rm = TRUE) / sum(WTPP, na.rm = TRUE),  # Weighted mean
+    .groups = "drop"  # Prevents further grouping issues
+  )
+
+# Ensure 'year' is treated as a factor
+trend_data$year <- as.factor(trend_data$year)
+
+# Create the trend plot with weighted means
+trend_plot <- ggplot(trend_data, aes(x = year, y = mean_harm, color = as.factor(treated), group = as.factor(treated))) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  geom_vline(xintercept = which(levels(trend_data$year) == "2018/2019"), linetype = "dashed", color = "black", size = 0.8) +
+  labs(
+    title = "Trend of Perception of Harm of E-Cigarettes (Once in a while)",
+    subtitle = "Comparison Between Treated and Control Provinces",
+    x = "Year",
+    y = "Mean Perception of Harm (PH_050, Weighted)",
+    color = "Group"
+  ) +
+  scale_color_manual(values = c("0" = "blue", "1" = "red"), labels = c("Control Provinces", "Treated Provinces")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 12)
+  )
+
+# Save the plot as a JPEG file
+ggsave("trend_plot_harm_indicator_PH_050_weighted.jpg", plot = trend_plot, width = 10, height = 6, dpi = 300)
+
+```
+
+
+
+
+
+```{r,message=FALSE,echo=TRUE, results='hide'}
+#Create graph showing trends in Perception of harm of cig use in treated and control provinces
+
+library(ggplot2)
+library(dplyr)
+
+# Prepare the data: calculate weighted mean perception of harm (harm_indicator_PH_010)
+trend_data <- mydata2 %>%
+  group_by(year, treated) %>%
+  summarize(
+    mean_harm = sum(harm_indicator_PH_010 * WTPP, na.rm = TRUE) / sum(WTPP, na.rm = TRUE)  # Weighted mean
+  )
+
+# Ensure 'year' is treated as a factor
+trend_data$year <- as.factor(trend_data$year)
+
+# Create the trend plot with weighted means
+trend_plot <- ggplot(trend_data, aes(x = year, y = mean_harm, color = as.factor(treated), group = as.factor(treated))) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  geom_vline(xintercept = "2018/2019", linetype = "dashed", color = "black", size = 0.8) +
+  labs(
+    title = "Trend of Perception of Harm of Cigarettes (Once in a while)",
+    subtitle = "Comparison Between Treated and Control Provinces",
+    x = "Year",
+    y = "Mean Perception of Harm (PH_010, Weighted)",
+    color = "Group"
+  ) +
+  scale_color_manual(values = c("0" = "blue", "1" = "red"), labels = c("Control Provinces", "Treated Provinces")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold"),
+    plot.subtitle = element_text(size = 14),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 12)
+  )
+
+# Save the plot as a JPEG file
+ggsave("trend_plot_harm_indicator_PH_010_weighted.jpg", plot = trend_plot, width = 10, height = 6, dpi = 300)
+
+```
+
+
+
+
+
+
+
+Descriptive Statistics
+
+```{r,echo=TRUE, results='hide'}
+#Descriptive Statistics for categorical variables turned binary variables for control provinces 
+
+# Define the list of binary variables
+binary_vars <- c("GRADE_7", "GRADE_8", "GRADE_9", "GRADE_10", 
+                 "GRADE_11", "GRADE_12", "DVTY1ST_1", "DVTY1ST_2", "DVTY1ST_3")
+
+# Weighted mean and SD function
+calculate_weighted_stats <- function(data, var, weight_col) {
+  # Subset the variable and weights
+  values <- data[[var]]
+  weights <- data[[weight_col]]
+  
+  # Check if weights or variable are invalid
+  if (sum(!is.na(values)) == 0 || sum(weights, na.rm = TRUE) == 0) {
+    return(data.frame(Variable = var, Weighted_Mean = NA, Weighted_SD = NA))
+  }
+  
+  # Calculate weighted mean
+  weighted_mean <- sum(values * weights, na.rm = TRUE) / sum(weights, na.rm = TRUE)
+  
+  # Calculate weighted variance and standard deviation
+  weighted_variance <- sum(weights * (values - weighted_mean)^2, na.rm = TRUE) / sum(weights, na.rm = TRUE)
+  weighted_sd <- sqrt(weighted_variance)
+  
+  return(data.frame(Variable = var, 
+                    Weighted_Mean = round(weighted_mean, 3), 
+                    Weighted_SD = round(weighted_sd, 3)))
+}
+
+# Filter the dataset for treated = 0
+untreated_data <- mydata2[mydata2$treated == 0, ]
+
+# Apply the function to all binary variables
+weighted_stats_untreated <- do.call(rbind, lapply(binary_vars, calculate_weighted_stats, data = untreated_data, weight_col = "WTPP"))
+
+# View the results
+print(weighted_stats_untreated)
+
+
+```
+```{r,echo=TRUE, results='hide'}
+#Descriptive Statistics for other variables for control provinces 
+
+# Define the list of variables
+variables <- c("harm_indicator_PH_010", "harm_indicator_PH_050", "flavored_ban", 
+               "ecig_reg", "SEX_binary", "mentholcigaretteban", "DVURBAN_binary")
+
+# Weighted mean and SD function
+calculate_weighted_stats <- function(data, var, weight_col) {
+  # Subset the variable and weights
+  values <- data[[var]]
+  weights <- data[[weight_col]]
+  
+  # Check if weights or variable are invalid
+  if (sum(!is.na(values)) == 0 || sum(weights, na.rm = TRUE) == 0) {
+    return(data.frame(Variable = var, Weighted_Mean = NA, Weighted_SD = NA))
+  }
+  
+  # Calculate weighted mean
+  weighted_mean <- sum(values * weights, na.rm = TRUE) / sum(weights, na.rm = TRUE)
+  
+  # Calculate weighted variance and standard deviation
+  weighted_variance <- sum(weights * (values - weighted_mean)^2, na.rm = TRUE) / sum(weights, na.rm = TRUE)
+  weighted_sd <- sqrt(weighted_variance)
+  
+  return(data.frame(Variable = var, 
+                    Weighted_Mean = round(weighted_mean, 3), 
+                    Weighted_SD = round(weighted_sd, 3)))
+}
+
+# Filter the dataset for treated = 0
+untreated_data <- mydata2[mydata2$treated == 0, ]
+
+# Apply the function to the specified variables
+weighted_stats_untreated <- do.call(rbind, lapply(variables, calculate_weighted_stats, data = untreated_data, weight_col = "WTPP"))
+
+# View the results
+print(weighted_stats_untreated)
+
+```
+```{r,echo=TRUE, results='hide'}
+
+#Descriptive Statistics for categorical variables turned binary variables for treated provinces 
+
+# Define the list of binary variables
+binary_vars <- c( "GRADE_7", "GRADE_8", "GRADE_9", "GRADE_10", 
+                 "GRADE_11", "GRADE_12", "DVTY1ST_1", "DVTY1ST_2", "DVTY1ST_3")
+
+# Weighted mean and SD function
+calculate_weighted_stats <- function(data, var, weight_col) {
+  # Subset the variable and weights
+  values <- data[[var]]
+  weights <- data[[weight_col]]
+  
+  # Check if weights or variable are invalid
+  if (sum(!is.na(values)) == 0 || sum(weights, na.rm = TRUE) == 0) {
+    return(data.frame(Variable = var, Weighted_Mean = NA, Weighted_SD = NA))
+  }
+  
+  # Calculate weighted mean
+  weighted_mean <- sum(values * weights, na.rm = TRUE) / sum(weights, na.rm = TRUE)
+  
+  # Calculate weighted variance and standard deviation
+  weighted_variance <- sum(weights * (values - weighted_mean)^2, na.rm = TRUE) / sum(weights, na.rm = TRUE)
+  weighted_sd <- sqrt(weighted_variance)
+  
+  return(data.frame(Variable = var, 
+                    Weighted_Mean = round(weighted_mean, 3), 
+                    Weighted_SD = round(weighted_sd, 3)))
+}
+
+# Filter the dataset for treated = 1
+treated_data <- mydata2[mydata2$treated == 1, ]
+
+# Apply the function to all binary variables
+weighted_stats_treated <- do.call(rbind, lapply(binary_vars, calculate_weighted_stats, data = treated_data, weight_col = "WTPP"))
+
+# View the results
+print(weighted_stats_treated)
+
+```
+
+```{r,echo=TRUE, results='hide'}
+
+#Descriptive Statistics for other variables for treated provinces 
+
+# Define the list of variables
+variables <- c("harm_indicator_PH_010", "harm_indicator_PH_050", "flavored_ban", 
+               "ecig_reg", "SEX_binary", "mentholcigaretteban", "DVURBAN_binary")
+
+# Weighted mean and SD function
+calculate_weighted_stats <- function(data, var, weight_col) {
+  # Subset the variable and weights
+  values <- data[[var]]
+  weights <- data[[weight_col]]
+  
+  # Check if weights or variable are invalid
+  if (sum(!is.na(values)) == 0 || sum(weights, na.rm = TRUE) == 0) {
+    return(data.frame(Variable = var, Weighted_Mean = NA, Weighted_SD = NA))
+  }
+  
+  # Calculate weighted mean
+  weighted_mean <- sum(values * weights, na.rm = TRUE) / sum(weights, na.rm = TRUE)
+  
+  # Calculate weighted variance and standard deviation
+  weighted_variance <- sum(weights * (values - weighted_mean)^2, na.rm = TRUE) / sum(weights, na.rm = TRUE)
+  weighted_sd <- sqrt(weighted_variance)
+  
+  return(data.frame(Variable = var, 
+                    Weighted_Mean = round(weighted_mean, 3), 
+                    Weighted_SD = round(weighted_sd, 3)))
+}
+
+# Filter the dataset for treated = 1
+treated_data <- mydata2[mydata2$treated == 1, ]
+
+# Apply the function to the specified variables
+weighted_stats_treated <- do.call(rbind, lapply(variables, calculate_weighted_stats, data = treated_data, weight_col = "WTPP"))
+
+# View the results
+print(weighted_stats_treated)
+
+```
+```{r,echo=TRUE, results='hide'}
+
+# count the number of observations in treated and control provinces
+library(dplyr)
+
+# Count the number of observations where treated = 1
+treated_count <- mydata2 %>%
+  filter(treated == 1) %>%
+  summarize(count = n())
+
+print(treated_count)
+
+
+# Count the number of observations where treated = 1
+treated_count1 <- mydata2 %>%
+  filter(treated == 0) %>%
+  summarize(count = n())
+
+print(treated_count1)
+```
+
+
+
+Female and Male Regressions
+```{r,echo=TRUE, results='hide'}
+
+#Regressions for females
+
+# Filter the data for SEX_binary == 1
+filtered_data <- mydata2 %>% filter(SEX_binary == 1)
+
+# Run the DD model with year-month and province dummies
+dd_model <- lm(harm_indicator_PH_010 ~ flavored_ban +
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+# Print the regression results
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+
+```
+
+```{r,echo=TRUE, results='hide'}
+
+#Regressions for females
+
+# Filter the data for SEX_binary == 1
+filtered_data1 <- mydata2 %>% filter(SEX_binary == 0) #male dataset
+
+
+# Run the DD model with year-month and province dummies
+dd_model <- lm(harm_indicator_PH_010 ~ flavored_ban +
+                 ecig_reg + 
+                 SEX_binary +
+                 mentholcigaretteban +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                 as.factor(DVTY1ST)+
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+```{r,echo=TRUE, results='hide'}
+
+#Regressions for females
+# Run the DD model with year-month and province dummies
+dd_model <- lm(harm_indicator_PH_050 ~ flavored_ban +
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+# Print the regression results
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+
+
+```{r,echo=TRUE, results='hide'}
+
+#Regressions for females
+# Run the DD model with year-month and province dummies
+dd_model <- lm(harm_indicator_PH_050 ~ flavored_ban +
+                 ecig_reg + 
+                 SEX_binary +
+                 mentholcigaretteban +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                 as.factor(DVTY1ST)+
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+```{r,echo=TRUE, results='hide'}
+
+#Regressions for males
+# Run the DD model with year-month and province dummies
+dd_model <- lm(harm_indicator_PH_010 ~ flavored_ban +
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data1, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+# Print the regression results
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+
+```
+
+```{r,echo=TRUE, results='hide'}
+
+#Regressions for males
+# Run the DD model with year-month and province dummies
+dd_model <- lm(harm_indicator_PH_010 ~ flavored_ban +
+                 ecig_reg + 
+                 SEX_binary +
+                 mentholcigaretteban +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                 as.factor(DVTY1ST)+
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data1, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+```{r,echo=TRUE, results='hide'}
+#Regressions for males
+# Run the DD model with year-month and province dummies
+dd_model <- lm(harm_indicator_PH_050 ~ flavored_ban +
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data1, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+# Print the regression results
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+
+
+```{r,echo=TRUE, results='hide'}
+#Regression for males
+# Run the DD model with year-month and province dummies
+dd_model <- lm(harm_indicator_PH_050 ~ flavored_ban +
+                 ecig_reg + 
+                 SEX_binary +
+                 mentholcigaretteban +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                 as.factor(DVTY1ST)+
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data1, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+Robustness check
+```{r,echo=TRUE, results='hide'}
+#Exclude control provinces 
+# Filter the dataset to include only treated observations
+filtered_data2 <- mydata2 %>% filter(treated == 1)
+# Run the DD model with year-month and province dummies without contorls
+dd_model <- lm(harm_indicator_PH_010 ~ flavored_ban +
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data2, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+# Print the regression results
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+```{r,echo=TRUE, results='hide'}
+# Run the DD model with year-month and province dummies with controls
+dd_model <- lm(harm_indicator_PH_010 ~ flavored_ban +
+                 ecig_reg + 
+                 SEX_binary +
+                 mentholcigaretteban +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                 as.factor(DVTY1ST)+
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data2, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+
+```{r,echo=TRUE, results='hide'}
+# Run the DD model with year-month and province dummies without controls
+dd_model <- lm(harm_indicator_PH_050 ~ flavored_ban +
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data2, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+# Print the regression results
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+```{r,echo=TRUE, results='hide'}
+# Run the DD model with year-month and province dummies with controls
+dd_model <- lm(harm_indicator_PH_050 ~ flavored_ban +
+                 ecig_reg + 
+                 SEX_binary +
+                 mentholcigaretteban +
+                 as.factor(GRADE) +
+                 DVURBAN_binary +
+                 as.factor(DVTY1ST)+
+                 as.factor(year) +   # Year-month dummies
+                 as.factor(provID),  # Province dummies
+               data = filtered_data2, weights = WTPP)
+
+# Apply coeftest with cluster-robust standard errors
+clustered_se <- vcovCL(dd_model, cluster = ~provID)
+summary_results <- coeftest(dd_model, vcov = clustered_se)
+
+
+
+print(summary_results)
+
+# Extract R-squared from the model
+r_squared <- summary(dd_model)$r.squared
+
+# Extract number of observations (N) from the model
+n_obs <- length(dd_model$fitted.values)
+
+# Print the results
+cat("R-squared:", round(r_squared, 3), "\n")
+cat("Number of Observations (N):", n_obs, "\n")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
